@@ -159,7 +159,7 @@ def create_agents() -> List[Agent]:
     # 초기 관계 설정
     inject_initial_relationship(
         agent_a=agent_map["지훈"],
-        agent_b=agent_map["수진"],
+        agent_b=agent_map["하린"],
         relationship_name="연애중",
         emotional_context=(
             "현재 연애중인 연인 관계다."
@@ -172,7 +172,7 @@ def create_agents() -> List[Agent]:
 
     inject_initial_relationship(
         agent_a=agent_map["민수"],
-        agent_b=agent_map["하린"],
+        agent_b=agent_map["수진"],
         relationship_name="연애중",
         emotional_context=(
             "현재 연애중인 연인 관계다."
@@ -187,25 +187,25 @@ def create_agents() -> List[Agent]:
     inject_public_fact(
         agents=agents,
         subject_name="지훈",
-        fact="지훈은 현재 수진과 연애중이다."
+        fact="지훈은 현재 하린과 연애중이다."
     )
 
     inject_public_fact(
         agents=agents,
         subject_name="하린",
-        fact="하린은 현재 민수와 연애중이다."
+        fact="하린은 현재 지훈와 연애중이다."
     )
 
     inject_public_fact(
         agents=agents,
         subject_name="민수",
-        fact="민수는 현재 하린과 연애중이다."
+        fact="민수는 현재 수진과 연애중이다."
     )
 
     inject_public_fact(
         agents=agents,
         subject_name="수진",
-        fact="수진은 현재 지훈과 연애중이다."
+        fact="수진은 현재 민수과 연애중이다."
     )
 
     return agents
