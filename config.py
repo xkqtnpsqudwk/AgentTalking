@@ -28,6 +28,18 @@ def get_int_env(name: str, default: int) -> int:
         return default
 
 
+def get_float_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+
+    if value is None:
+        return default
+
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 def get_str_env(name: str, default: str) -> str:
     value = os.getenv(name)
 
@@ -40,19 +52,21 @@ def get_str_env(name: str, default: str) -> str:
 USE_OPENAI = get_bool_env("USE_OPENAI", True)
 OPENAI_API_KEY = get_str_env("OPENAI_API_KEY", "")
 OPENAI_MODEL_NAME = get_str_env("OPENAI_MODEL_NAME", "gpt-5.5")
-OPENAI_MAX_OUTPUT_TOKENS = get_int_env("OPENAI_MAX_OUTPUT_TOKENS", 512)
+OPENAI_MAX_OUTPUT_TOKENS = get_int_env("OPENAI_MAX_OUTPUT_TOKENS", 1024)
 
 USE_OLLAMA = get_bool_env("USE_OLLAMA", True)
 OLLAMA_MODEL_NAME = get_str_env("OLLAMA_MODEL_NAME", "qwen3:8b")
 OLLAMA_NUM_CTX = get_int_env("OLLAMA_NUM_CTX", 2048)
-OLLAMA_NUM_PREDICT = get_int_env("OLLAMA_NUM_PREDICT", 192)
+OLLAMA_NUM_PREDICT = get_int_env("OLLAMA_NUM_PREDICT", 256)
 
 START_HOUR = get_int_env("START_HOUR", 8)
 END_HOUR = get_int_env("END_HOUR", 22)
 SIMULATION_DAYS = get_int_env("SIMULATION_DAYS", 2)
 DEFAULT_TURNS = get_int_env("DEFAULT_TURNS", 2)
 
-MAX_MEMORY_PER_TARGET = get_int_env("MAX_MEMORY_PER_TARGET", 5)
+MAX_MEMORY_PER_TARGET = get_int_env("MAX_MEMORY_PER_TARGET", 3)
+
+TOPIC_PROBABILITY = get_float_env("TOPIC_PROBABILITY", 0.5)
 
 REPORT_AGENT_NAME = get_str_env("REPORT_AGENT_NAME", "지훈")
 REPORT_FILE_PATH = get_str_env("REPORT_FILE_PATH", "reports/final_jihoon_report.md")

@@ -15,6 +15,7 @@ from config import (
     SIMULATION_DAYS,
     DEFAULT_TURNS,
     MAX_MEMORY_PER_TARGET,
+    TOPIC_PROBABILITY,
     REPORT_AGENT_NAME,
     REPORT_FILE_PATH,
 )
@@ -24,7 +25,11 @@ from ollama_llm import OllamaLLM
 from openai_llm import OpenAILLM
 from rule_based_llm import RuleBasedLLM
 from simulation import Simulation
-from utils import inject_initial_memory, make_time_slots
+from utils import (
+    inject_initial_memory,
+    inject_initial_relationship,
+    make_time_slots
+)
 
 
 def create_llm_client() -> LLMClient:
@@ -86,7 +91,10 @@ def create_agents() -> List[Agent]:
                 interests=["프로그래밍", "게임 개발", "도서관 공부"],
                 goal="학교 프로젝트를 완성하고 게임 개발 역량을 키우는 것",
                 background="컴퓨터공학을 공부하며 게임 시스템 설계에 관심이 많다.",
-                quirks=["대화 중 예시를 들어 설명하려 함", "처음에는 조심스럽지만 익숙해지면 질문이 많아짐"]
+                quirks=[
+                    "대화 중 예시를 들어 설명하려 함",
+                    "처음에는 조심스럽지만 익숙해지면 질문이 많아짐"
+                ]
             )
         ),
         Agent(
@@ -100,7 +108,10 @@ def create_agents() -> List[Agent]:
                 interests=["커피", "음악", "동네 사람들과 대화하기"],
                 goal="카페에서 단골들과 좋은 관계를 만들고, 언젠가 작은 카페를 여는 것",
                 background="동네 카페에서 일하며 사람들과 자주 대화한다.",
-                quirks=["상대의 기분을 먼저 살핌", "대화 중 농담을 조금 섞음"]
+                quirks=[
+                    "상대의 기분을 먼저 살핌",
+                    "대화 중 농담을 조금 섞음"
+                ]
             )
         ),
         Agent(
@@ -114,7 +125,10 @@ def create_agents() -> List[Agent]:
                 interests=["브랜딩", "전시", "조용한 카페", "스케치"],
                 goal="개인 포트폴리오를 완성하고 독립 프로젝트를 시작하는 것",
                 background="프리랜서 디자인 작업을 준비하며 여러 장소에서 작업한다.",
-                quirks=["사람의 말투나 표정을 잘 관찰함", "생각을 바로 말하기보다 한 번 정리해서 표현함"]
+                quirks=[
+                    "사람의 말투나 표정을 잘 관찰함",
+                    "생각을 바로 말하기보다 한 번 정리해서 표현함"
+                ]
             )
         ),
         Agent(
@@ -128,7 +142,10 @@ def create_agents() -> List[Agent]:
                 interests=["알고리즘", "자동화", "SF 소설", "조용한 작업 공간"],
                 goal="복잡한 문제를 단순한 시스템으로 정리하는 능력을 더 키우는 것",
                 background="소프트웨어 개발자로 일하며 혼자 집중하는 시간을 중요하게 여긴다.",
-                quirks=["대화를 구조화해서 이해하려 함", "불확실한 내용은 단정하지 않음"]
+                quirks=[
+                    "대화를 구조화해서 이해하려 함",
+                    "불확실한 내용은 단정하지 않음"
+                ]
             )
         ),
     ]
@@ -148,6 +165,18 @@ def create_agents() -> List[Agent]:
         receiver=agent_map["민수"],
         subject_name="지훈",
         fact="지훈은 예전에 민수와 같은 동네에 살았다."
+    )
+
+    inject_initial_relationship(
+        agent_a=agent_map["지훈"],
+        agent_b=agent_map["하린"],
+        relationship_name="연애중"
+    )
+
+    inject_initial_relationship(
+        agent_a=agent_map["민수"],
+        agent_b=agent_map["수진"],
+        relationship_name="연애중"
     )
 
     return agents
@@ -176,7 +205,8 @@ def main() -> None:
         agents=agents,
         places=places,
         time_slots=time_slots,
-        llm_client=llm_client
+        llm_client=llm_client,
+        topic_probability=TOPIC_PROBABILITY
     )
 
     simulation.run(

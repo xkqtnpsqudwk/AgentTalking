@@ -309,6 +309,10 @@ Agent별 발언 횟수:
 - has_met_before가 false인 상대와는 각 Agent의 첫 발언에서만 인사와 자기소개를 한다.
 - has_met_before가 true인 상대에게는 이름, 나이, 직업을 다시 소개하지 않는다.
 - 이미 만난 상대와는 이전 Memory, Relation, meet_count를 바탕으로 자연스럽게 이어서 대화한다.
+- Relation에 연애중, 가족, 친구, 동료 같은 기존 관계가 있으면 대화 톤에 자연스럽게 반영한다.
+- 기존 관계를 매 발언마다 직접 설명하지 않는다.
+- 연애중 관계라면 상대의 상태를 조금 더 신경 쓰거나 친근한 어조를 사용할 수 있다.
+- 단, 과장된 애정 표현이나 지나치게 사적인 표현은 피한다.
 - Memory에 상대 정보가 있더라도 has_met_before가 false이면 실제 대면은 처음인 것으로 처리한다.
 - 같은 라운드 안에서 자기소개를 반복하지 않는다.
 - 각 Agent의 speech_style, personality, interests, goal, background, quirks를 말투와 발화 내용에 적당히 반영한다.

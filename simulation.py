@@ -1,6 +1,7 @@
 from collections import defaultdict
 from typing import Dict, List, Optional
 import os
+import random
 
 from llm_client import LLMClient
 from models import Agent, ConversationRound, RoundAnalysis
@@ -12,7 +13,8 @@ class Simulation:
         agents: List[Agent],
         places: List[str],
         time_slots: List[str],
-        llm_client: LLMClient
+        llm_client: LLMClient,
+        topic_probability: float = 0.5
     ):
         self.agents = {
             agent.name: agent
@@ -22,6 +24,8 @@ class Simulation:
         self.places = places
         self.time_slots = time_slots
         self.llm_client = llm_client
+
+        self.topic_probability = max(0.0, min(1.0, topic_probability))
 
         self.round_id_counter = 1
         self.rounds: List[ConversationRound] = []
@@ -49,12 +53,18 @@ class Simulation:
                         for agent in agents_at_place
                     }
 
+                    topic = self._pick_optional_topic(
+                        place=place,
+                        time_label=time_label,
+                        participants=agents_at_place
+                    )
+
                     self.run_conversation_round(
                         day=day,
                         time_label=time_label,
                         place=place,
                         participants=agents_at_place,
-                        topic=None,
+                        topic=topic,
                         turns_by_agent=turns_by_agent
                     )
 
@@ -92,6 +102,136 @@ class Simulation:
 
         return dict(place_groups)
 
+    def _pick_optional_topic(
+        self,
+        place: str,
+        time_label: str,
+        participants: List[Agent]
+    ) -> Optional[str]:
+        if self.topic_probability <= 0.0:
+            return None
+
+        if random.random() > self.topic_probability:
+            return None
+
+        return self._pick_random_topic(
+            place=place,
+            time_label=time_label,
+            participants=participants
+        )
+
+    def _pick_random_topic(
+        self,
+        place: str,
+        time_label: str,
+        participants: List[Agent]
+    ) -> str:
+        topics_by_place = {
+            "집": [
+                "오늘 하루 계획",
+                "최근 생활 패턴",
+                "쉬는 시간에 하는 일",
+                "집에서 집중하는 방법"
+            ],
+            "학교": [
+                "수업과 과제",
+                "시험 준비",
+                "학교 생활",
+                "최근 공부한 내용"
+            ],
+            "카페": [
+                "커피 취향",
+                "최근 관심사",
+                "작업하기 좋은 장소",
+                "요즘 자주 하는 일"
+            ],
+            "도서관": [
+                "공부 계획",
+                "읽고 있는 책",
+                "집중하는 방법",
+                "조용한 장소에서 하는 일"
+            ],
+            "레스토랑": [
+                "식사 메뉴",
+                "하루 동안 있었던 일",
+                "요즘 고민",
+                "최근 가장 바빴던 일"
+            ],
+            "공원": [
+                "산책",
+                "날씨",
+                "휴식과 취미",
+                "기분 전환 방법"
+            ]
+        }
+
+        default_topics = [
+            "최근 근황",
+            "오늘 일정",
+            "요즘 관심사",
+            "최근 기억에 남는 일"
+        ]
+
+        candidates = list(topics_by_place.get(place, default_topics))
+
+        hour = int(time_label.split(":")[0])
+
+        if hour in (12, 18):
+            candidates.extend([
+                "식사하면서 나누는 근황",
+                "오늘 하루 중 가장 바빴던 일",
+                "오후 일정이나 저녁 계획"
+            ])
+
+        if self._has_romantic_pair(participants):
+            candidates.extend([
+                "서로의 최근 컨디션",
+                "오늘 일정이 힘들지는 않았는지",
+                "같이 시간을 보내는 방식"
+            ])
+
+        self._add_interest_based_topics(
+            candidates=candidates,
+            participants=participants
+        )
+
+        return random.choice(candidates)
+
+    def _has_romantic_pair(
+        self,
+        participants: List[Agent]
+    ) -> bool:
+        for viewer in participants:
+            for target in participants:
+                if viewer.name == target.name:
+                    continue
+
+                reflection = viewer.relation_map.get(target.name)
+
+                if reflection and "연애중" in reflection.summary:
+                    return True
+
+                memory_entries = viewer.memory.get(target.name, [])
+
+                for entry in memory_entries:
+                    if "연애중" in entry.fact:
+                        return True
+
+        return False
+
+    def _add_interest_based_topics(
+        self,
+        candidates: List[str],
+        participants: List[Agent]
+    ) -> None:
+        interests = []
+
+        for agent in participants:
+            interests.extend(agent.profile.interests[:2])
+
+        for interest in interests:
+            candidates.append(f"{interest}에 대한 이야기")
+
     def run_conversation_round(
         self,
         day: int,
@@ -116,8 +256,6 @@ class Simulation:
             topic=topic
         )
 
-        # 대화 생성 전에는 meeting_map을 갱신하지 않는다.
-        # 그래야 이번 라운드가 첫 만남인지 정확히 판단할 수 있다.
         transcript = self.llm_client.generate_conversation(
             participants=participants,
             place=place,
@@ -131,8 +269,6 @@ class Simulation:
 
         self._print_round(conversation_round)
 
-        # 실제 대화가 발생한 뒤에 만남 기록을 저장한다.
-        # 다음 라운드부터는 has_met_before=True가 된다.
         self._store_meeting_history(
             conversation_round=conversation_round,
             participants=participants
@@ -244,6 +380,11 @@ class Simulation:
         )
 
         print(f"참여자: {', '.join(conversation_round.participants)}")
+
+        if conversation_round.topic:
+            print(f"Topic: {conversation_round.topic}")
+        else:
+            print("Topic: 없음")
 
         for turn in conversation_round.transcript:
             print(f"{turn.speaker}: {turn.text}")
