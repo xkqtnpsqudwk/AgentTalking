@@ -4,7 +4,7 @@ import os
 import random
 
 from llm_client import LLMClient
-from models import Agent, ConversationRound, RoundAnalysis
+from models import Agent, ConversationRound, RoundAnalysis, MemoryEntry
 
 
 class Simulation:
@@ -440,7 +440,23 @@ class Simulation:
                     )
 
             lines.append("")
-            lines.append("### 관계 / Reflection")
+            lines.append("### 관계 관련 사실")
+
+            relationship_entries = self._extract_relationship_memory_entries(
+                memory_entries=memory_entries
+            )
+
+            if not relationship_entries:
+                lines.append("- 관계 관련 사실이 없다.")
+            else:
+                for entry in relationship_entries:
+                    lines.append(
+                        f"- {entry.fact} "
+                        f"(Day {entry.day}, {entry.time_label}, Round {entry.round_id})"
+                    )
+
+            lines.append("")
+            lines.append("### 관계 / 마지막 Reflection")
 
             reflection_entry = perspective_agent.relation_map.get(target_name)
 
@@ -448,10 +464,55 @@ class Simulation:
                 lines.append("- 아직 관계 Reflection이 없다.")
             else:
                 lines.append(f"- {reflection_entry.summary}")
+                lines.append(
+                    f"  - 갱신 시점: Day {reflection_entry.day}, "
+                    f"{reflection_entry.time_label}, Round {reflection_entry.round_id}"
+                )
 
             lines.append("")
 
         return "\n".join(lines)
+
+    def _extract_relationship_memory_entries(
+        self,
+        memory_entries: List[MemoryEntry]
+    ) -> List[MemoryEntry]:
+        relationship_keywords = [
+            "연애중",
+            "연인",
+            "애인",
+            "사귀",
+            "사귄",
+            "현재 수진과",
+            "현재 지훈과",
+            "현재 민수와",
+            "현재 하린과",
+            "헤어진 연인",
+            "과거에는",
+            "과거 연인",
+            "전 연인",
+            "이별",
+            "헤어",
+            "어색함",
+            "미련",
+            "거리감",
+            "조심스럽",
+            "반말",
+            "챙긴다",
+            "배려",
+            "편하게 말",
+            "가까운 관계",
+            "현재 관계",
+            "과거 관계"
+        ]
+
+        relationship_entries = []
+
+        for entry in memory_entries:
+            if any(keyword in entry.fact for keyword in relationship_keywords):
+                relationship_entries.append(entry)
+
+        return relationship_entries
 
     def save_report(
         self,
