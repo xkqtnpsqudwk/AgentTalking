@@ -116,6 +116,8 @@ class Simulation:
             topic=topic
         )
 
+        # 대화 생성 전에는 meeting_map을 갱신하지 않는다.
+        # 그래야 이번 라운드가 첫 만남인지 정확히 판단할 수 있다.
         transcript = self.llm_client.generate_conversation(
             participants=participants,
             place=place,
@@ -129,6 +131,13 @@ class Simulation:
 
         self._print_round(conversation_round)
 
+        # 실제 대화가 발생한 뒤에 만남 기록을 저장한다.
+        # 다음 라운드부터는 has_met_before=True가 된다.
+        self._store_meeting_history(
+            conversation_round=conversation_round,
+            participants=participants
+        )
+
         analysis = self.llm_client.analyze_round(
             conversation_round=conversation_round,
             participants=participants
@@ -141,6 +150,24 @@ class Simulation:
         )
 
         return conversation_round
+
+    def _store_meeting_history(
+        self,
+        conversation_round: ConversationRound,
+        participants: List[Agent]
+    ) -> None:
+        for viewer in participants:
+            for target in participants:
+                if viewer.name == target.name:
+                    continue
+
+                viewer.mark_met(
+                    target_name=target.name,
+                    day=conversation_round.day,
+                    time_label=conversation_round.time_label,
+                    place=conversation_round.place,
+                    round_id=conversation_round.round_id
+                )
 
     def _apply_round_analysis(
         self,
@@ -236,8 +263,14 @@ class Simulation:
         lines.append("## 기본 정보")
         lines.append(f"- 이름: {perspective_agent.profile.name}")
         lines.append(f"- 나이: {perspective_agent.profile.age}")
+        lines.append(f"- 성별: {perspective_agent.profile.gender}")
         lines.append(f"- 직업: {perspective_agent.profile.job}")
         lines.append(f"- 성격: {perspective_agent.profile.personality}")
+        lines.append(f"- 말투: {perspective_agent.profile.speech_style}")
+        lines.append(f"- 관심사: {', '.join(perspective_agent.profile.interests)}")
+        lines.append(f"- 목표: {perspective_agent.profile.goal}")
+        lines.append(f"- 배경: {perspective_agent.profile.background}")
+        lines.append(f"- 특징: {', '.join(perspective_agent.profile.quirks)}")
         lines.append("")
 
         for target_name in self.agents.keys():
@@ -245,6 +278,29 @@ class Simulation:
                 continue
 
             lines.append(f"## {target_name}")
+            lines.append("")
+
+            meeting_record = perspective_agent.meeting_map.get(target_name)
+
+            lines.append("### 만남 기록")
+
+            if meeting_record is None:
+                lines.append("- 아직 직접 만난 적이 없다.")
+            else:
+                lines.append(
+                    f"- 처음 만난 시점: Day {meeting_record.first_day}, "
+                    f"{meeting_record.first_time_label}, "
+                    f"{meeting_record.first_place}, "
+                    f"Round {meeting_record.first_round_id}"
+                )
+                lines.append(
+                    f"- 마지막 만남: Day {meeting_record.last_day}, "
+                    f"{meeting_record.last_time_label}, "
+                    f"{meeting_record.last_place}, "
+                    f"Round {meeting_record.last_round_id}"
+                )
+                lines.append(f"- 총 만남 횟수: {meeting_record.meet_count}회")
+
             lines.append("")
             lines.append("### 알고 있는 사실")
 

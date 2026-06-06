@@ -170,8 +170,14 @@ Day: {day}
 Agent 정보:
 - 이름: {agent.name}
 - 나이: {agent.profile.age}
+- 성별: {agent.profile.gender}
 - 직업: {agent.profile.job}
 - 성격: {agent.profile.personality}
+- 말투: {agent.profile.speech_style}
+- 관심사: {json.dumps(agent.profile.interests, ensure_ascii=False)}
+- 목표: {agent.profile.goal}
+- 배경: {agent.profile.background}
+- 특징: {json.dumps(agent.profile.quirks, ensure_ascii=False)}
 
 사용 가능한 장소:
 {json.dumps(places, ensure_ascii=False)}
@@ -182,7 +188,8 @@ Agent 정보:
 규칙:
 - 각 시간 슬롯마다 반드시 장소 하나를 배정한다.
 - 장소는 반드시 사용 가능한 장소 목록 안에서만 고른다.
-- 직업과 성격에 어울리는 자연스러운 하루 계획을 만든다.
+- 직업, 성격, 목표, 관심사에 어울리는 자연스러운 하루 계획을 만든다.
+- 성별은 인물 정보로만 참고하고, 성별 고정관념에 따라 장소를 결정하지 않는다.
 - 출력은 JSON 객체만 사용한다.
 
 출력 예시:
@@ -221,17 +228,38 @@ Agent 정보:
         for agent in participants:
             known_info = {}
             relations = {}
+            meetings = {}
 
             for other in participants:
                 if other.name == agent.name:
                     continue
 
                 recent_memory = agent.memory.get(other.name, [])[-self.max_memory_per_target:]
+                meeting_record = agent.meeting_map.get(other.name)
 
-                known_info[other.name] = [
-                    entry.fact
-                    for entry in recent_memory
-                ]
+                known_info[other.name] = {
+                    "has_met_before": agent.has_met(other.name),
+                    "meet_count": meeting_record.meet_count if meeting_record else 0,
+                    "facts": [
+                        entry.fact
+                        for entry in recent_memory
+                    ]
+                }
+
+                meetings[other.name] = {
+                    "has_met_before": agent.has_met(other.name),
+                    "meet_count": meeting_record.meet_count if meeting_record else 0,
+                    "last_met": (
+                        {
+                            "day": meeting_record.last_day,
+                            "time": meeting_record.last_time_label,
+                            "place": meeting_record.last_place,
+                            "round_id": meeting_record.last_round_id
+                        }
+                        if meeting_record
+                        else None
+                    )
+                }
 
                 relation_entry = agent.relation_map.get(other.name)
                 relations[other.name] = (
@@ -243,10 +271,17 @@ Agent 정보:
             participant_info.append({
                 "name": agent.name,
                 "age": agent.profile.age,
+                "gender": agent.profile.gender,
                 "job": agent.profile.job,
                 "personality": agent.profile.personality,
+                "speech_style": agent.profile.speech_style,
+                "interests": agent.profile.interests,
+                "goal": agent.profile.goal,
+                "background": agent.profile.background,
+                "quirks": agent.profile.quirks,
                 "known_info": known_info,
-                "relations": relations
+                "relations": relations,
+                "meetings": meetings
             })
 
         system_prompt = """
@@ -270,9 +305,15 @@ Agent별 발언 횟수:
 
 대화 규칙:
 - 각 Agent는 지정된 발언 횟수만큼 말한다.
-- 처음 만나는 상대와는 인사와 자기소개부터 시작한다.
-- 처음 만나는 상대에게 갑자기 깊은 주제를 꺼내지 않는다.
-- 이미 아는 상대가 있으면 Memory나 Relation을 자연스럽게 활용한다.
+- 처음 만나는 상대인지 여부는 known_info 안의 has_met_before 값을 기준으로 판단한다.
+- has_met_before가 false인 상대와는 각 Agent의 첫 발언에서만 인사와 자기소개를 한다.
+- has_met_before가 true인 상대에게는 이름, 나이, 직업을 다시 소개하지 않는다.
+- 이미 만난 상대와는 이전 Memory, Relation, meet_count를 바탕으로 자연스럽게 이어서 대화한다.
+- Memory에 상대 정보가 있더라도 has_met_before가 false이면 실제 대면은 처음인 것으로 처리한다.
+- 같은 라운드 안에서 자기소개를 반복하지 않는다.
+- 각 Agent의 speech_style, personality, interests, goal, background, quirks를 말투와 발화 내용에 적당히 반영한다.
+- 성별은 인물 정보로만 참고하고, 성별 고정관념에 따라 말투나 행동을 과장하지 않는다.
+- 모든 Agent가 똑같은 말투로 말하지 않게 한다.
 - 각 발언은 1~2문장으로 짧게 한다.
 - 출력은 JSON 배열만 사용한다.
 
@@ -358,8 +399,11 @@ Agent별 발언 횟수:
 
                 recent_memory = viewer.memory.get(target.name, [])[-self.max_memory_per_target:]
                 relation_entry = viewer.relation_map.get(target.name)
+                meeting_record = viewer.meeting_map.get(target.name)
 
                 analysis_context[viewer.name][target.name] = {
+                    "has_met_before": viewer.has_met(target.name),
+                    "meet_count": meeting_record.meet_count if meeting_record else 0,
                     "known_facts": [
                         entry.fact
                         for entry in recent_memory
@@ -394,13 +438,19 @@ Agent별 발언 횟수:
     {
         "name": agent.name,
         "age": agent.profile.age,
+        "gender": agent.profile.gender,
         "job": agent.profile.job,
-        "personality": agent.profile.personality
+        "personality": agent.profile.personality,
+        "speech_style": agent.profile.speech_style,
+        "interests": agent.profile.interests,
+        "goal": agent.profile.goal,
+        "background": agent.profile.background,
+        "quirks": agent.profile.quirks
     }
     for agent in participants
 ], ensure_ascii=False, indent=2)}
 
-기존 Memory / Reflection 요약:
+기존 Memory / Reflection / Meeting 요약:
 {json.dumps(analysis_context, ensure_ascii=False, indent=2)}
 
 대화 로그:
@@ -409,14 +459,15 @@ Agent별 발언 횟수:
 작업:
 1. facts_by_subject:
    - 각 인물에 대해 대화에서 명시적으로 드러난 객관적 사실만 추출한다.
-   - 나이, 직업, 취미, 일정, 선호, 소속, 경험, 장소 방문 사실 등이 가능하다.
+   - 나이, 성별, 직업, 취미, 일정, 선호, 소속, 경험, 장소 방문 사실 등이 가능하다.
    - 추측, 감정 평가, 관계 평가는 Fact에 넣지 않는다.
    - 사실이 없으면 빈 배열을 사용한다.
 
 2. reflections_by_viewer:
    - 각 관찰자(viewer)가 각 대상(target)을 어떻게 인식하는지 갱신한다.
    - viewer 자신에 대한 reflection은 만들지 않는다.
-   - 기존 Reflection과 이번 대화를 함께 고려한다.
+   - 기존 Reflection, known_facts, meet_count, 이번 대화를 함께 고려한다.
+   - 대상의 성격, 말투, 관심사, 목표, 특징이 관계 인식에 영향을 줄 수 있다.
    - 너무 과장하지 않고 1~2문장으로 작성한다.
 
 출력 형식:

@@ -132,16 +132,18 @@ class RuleBasedLLM:
             if agent.name != speaker.name
         ]
 
-        unfamiliar_agents = [
+        first_meeting_targets = [
             agent
             for agent in others
-            if not speaker.knows(agent.name)
+            if not speaker.has_met(agent.name)
         ]
 
-        if unfamiliar_agents and turn_index < len(participants):
+        if first_meeting_targets and turn_index < len(participants):
             return (
                 f"안녕하세요. 저는 {speaker.name}입니다. "
-                f"{speaker.profile.age}살이고, {speaker.profile.job}입니다."
+                f"{speaker.profile.age}살 {speaker.profile.gender}이고, "
+                f"{speaker.profile.job}입니다. "
+                f"{self._short_trait_sentence(speaker)}"
             )
 
         if topic:
@@ -159,16 +161,35 @@ class RuleBasedLLM:
         if known_agents:
             target = known_agents[0]
             latest_memory = speaker.memory[target.name][-1].fact
+            interest = self._first_interest(speaker)
 
             return (
                 f"{target.name}님, 지난번에 '{latest_memory}'라고 들었던 게 기억나요. "
-                f"오늘 {time_label}에 {place}에서 다시 보네요."
+                f"저는 요즘 {interest} 쪽에 관심이 많아서 그런 이야기도 해보고 싶네요."
             )
 
-        return (
-            f"오늘 {place}에 오니 사람들을 만나게 되네요. "
-            f"저는 {speaker.profile.personality} 성격에 가까워요."
-        )
+        if others:
+            target = others[0]
+            interest = self._first_interest(speaker)
+
+            return (
+                f"{target.name}님, 오늘 {place}에서 또 보네요. "
+                f"저는 요즘 {interest}에 관심이 있어요."
+            )
+
+        return f"오늘 {place}에 와 있습니다."
+
+    def _first_interest(self, agent: Agent) -> str:
+        if agent.profile.interests:
+            return agent.profile.interests[0]
+
+        return "일상적인 일"
+
+    def _short_trait_sentence(self, agent: Agent) -> str:
+        if agent.profile.speech_style:
+            return f"저는 {agent.profile.speech_style}입니다."
+
+        return f"저는 {agent.profile.personality} 성격입니다."
 
     def analyze_round(
         self,
@@ -184,8 +205,12 @@ class RuleBasedLLM:
 
             facts_by_subject[name] = [
                 f"{name}은 {profile.age}살이다.",
+                f"{name}의 성별은 {profile.gender}이다.",
                 f"{name}의 직업은 {profile.job}이다.",
                 f"{name}의 성격은 {profile.personality}이다.",
+                f"{name}의 말투 특징은 {profile.speech_style}이다.",
+                f"{name}의 관심사는 {', '.join(profile.interests)}이다.",
+                f"{name}의 목표는 {profile.goal}이다.",
                 (
                     f"{name}은 Day {conversation_round.day} "
                     f"{conversation_round.time_label}에 "
@@ -201,19 +226,22 @@ class RuleBasedLLM:
                     continue
 
                 old_reflection = viewer.relation_map.get(target.name)
+                meeting_record = viewer.meeting_map.get(target.name)
 
                 if old_reflection is None:
                     summary = (
                         f"{target.name}은 {target.profile.job}이며, "
-                        f"{target.profile.personality} 성향의 사람으로 보인다. "
+                        f"{target.profile.personality} 성향과 "
+                        f"'{target.profile.speech_style}' 말투를 가진 사람으로 보인다. "
                         f"{conversation_round.place}에서 대화했고 관계는 초기 단계다."
                     )
                 else:
+                    meet_count = meeting_record.meet_count if meeting_record else 1
+
                     summary = (
                         f"{target.name}에 대한 기존 인상은 유지된다. "
-                        f"Day {conversation_round.day} {conversation_round.time_label}에 "
-                        f"{conversation_round.place}에서 다시 대화하면서 "
-                        f"이전보다 더 익숙한 상대로 인식된다."
+                        f"이번 대화까지 총 {meet_count}회 만났으며, "
+                        f"{target.profile.interests[0] if target.profile.interests else '일상'}에 대한 관심을 가진 상대로 더 익숙하게 인식된다."
                     )
 
                 reflections_by_viewer[viewer.name][target.name] = summary
