@@ -28,6 +28,7 @@ from simulation import Simulation
 from utils import (
     inject_initial_memory,
     inject_initial_relationship,
+    inject_public_fact,
     make_time_slots
 )
 
@@ -155,28 +156,56 @@ def create_agents() -> List[Agent]:
         for agent in agents
     }
 
-    inject_initial_memory(
-        receiver=agent_map["지훈"],
-        subject_name="민수",
-        fact="민수는 예전에 지훈과 같은 동네에 살았다."
-    )
-
-    inject_initial_memory(
-        receiver=agent_map["민수"],
-        subject_name="지훈",
-        fact="지훈은 예전에 민수와 같은 동네에 살았다."
-    )
-
+    # 초기 관계 설정
     inject_initial_relationship(
         agent_a=agent_map["지훈"],
-        agent_b=agent_map["하린"],
-        relationship_name="연애중"
+        agent_b=agent_map["수진"],
+        relationship_name="연애중",
+        emotional_context=(
+            "현재 연애중인 연인 관계다."
+            "서로를 애인으로 대한다."
+            "둘만 있을 때는 반말을 쓰고 편하게 챙긴다."
+            "사소한 말투에서 익숙함과 애정이 드러난다."
+            "공개적으로 과하게 표현하지는 않지만 자연스럽게 서로를 챙긴다."
+        )
     )
 
     inject_initial_relationship(
         agent_a=agent_map["민수"],
-        agent_b=agent_map["수진"],
-        relationship_name="연애중"
+        agent_b=agent_map["하린"],
+        relationship_name="연애중",
+        emotional_context=(
+            "현재 연애중인 연인 관계다."
+            "서로를 애인으로 대한다."
+            "둘만 있을 때는 반말을 쓰고 편하게 챙긴다."
+            "사소한 말투에서 익숙함과 애정이 드러난다."
+            "공개적으로 과하게 표현하지는 않지만 자연스럽게 서로를 챙긴다."
+        )
+    )
+
+    # 사각 관계 정보를 모두가 어느 정도 알고 있는 상태로 시작한다.
+    inject_public_fact(
+        agents=agents,
+        subject_name="지훈",
+        fact="지훈은 현재 수진과 연애중이다."
+    )
+
+    inject_public_fact(
+        agents=agents,
+        subject_name="하린",
+        fact="하린은 현재 민수와 연애중이다."
+    )
+
+    inject_public_fact(
+        agents=agents,
+        subject_name="민수",
+        fact="민수는 현재 하린과 연애중이다."
+    )
+
+    inject_public_fact(
+        agents=agents,
+        subject_name="수진",
+        fact="수진은 현재 지훈과 연애중이다."
     )
 
     return agents

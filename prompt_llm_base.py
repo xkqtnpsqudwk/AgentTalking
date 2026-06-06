@@ -149,6 +149,53 @@ class PromptLLMBase:
 
         raise ValueError(f"JSON 재시도 실패: {last_error}")
 
+    def _extract_relationship_facts(
+        self,
+        agent: Agent,
+        target_name: str
+    ) -> List[str]:
+        """
+        일반 Memory는 최근 몇 개만 프롬프트에 넣지만,
+        관계 관련 Memory는 오래된 내용이어도 항상 넣기 위해 따로 추출한다.
+        """
+
+        relationship_keywords = [
+            "연애중",
+            "연인",
+            "애인",
+            "사귀",
+            "사귄",
+            "현재 수진과",
+            "현재 지훈과",
+            "현재 민수와",
+            "현재 하린과",
+            "헤어진 연인",
+            "과거에는",
+            "과거 연인",
+            "전 연인",
+            "이별",
+            "헤어",
+            "어색함",
+            "미련",
+            "거리감",
+            "조심스럽",
+            "반말",
+            "챙긴다",
+            "배려",
+            "편하게 말",
+            "가까운 관계",
+            "현재 관계",
+            "과거 관계"
+        ]
+
+        relationship_facts = []
+
+        for entry in agent.memory.get(target_name, []):
+            if any(keyword in entry.fact for keyword in relationship_keywords):
+                relationship_facts.append(entry.fact)
+
+        return relationship_facts
+
     def make_daily_plan(
         self,
         agent: Agent,
@@ -229,12 +276,18 @@ Agent 정보:
             known_info = {}
             relations = {}
             meetings = {}
+            relationship_states = {}
 
             for other in participants:
                 if other.name == agent.name:
                     continue
 
                 recent_memory = agent.memory.get(other.name, [])[-self.max_memory_per_target:]
+                relationship_facts = self._extract_relationship_facts(
+                    agent=agent,
+                    target_name=other.name
+                )
+
                 meeting_record = agent.meeting_map.get(other.name)
 
                 known_info[other.name] = {
@@ -243,7 +296,8 @@ Agent 정보:
                     "facts": [
                         entry.fact
                         for entry in recent_memory
-                    ]
+                    ],
+                    "relationship_facts": relationship_facts
                 }
 
                 meetings[other.name] = {
@@ -262,12 +316,39 @@ Agent 정보:
                 }
 
                 relation_entry = agent.relation_map.get(other.name)
-                relations[other.name] = (
+                relation_summary = (
                     relation_entry.summary
                     if relation_entry
+                    else ""
+                )
+
+                relations[other.name] = (
+                    relation_summary
+                    if relation_summary
                     else None
                 )
 
+                all_memory_text = " ".join(
+                    entry.fact
+                    for entry in agent.memory.get(other.name, [])
+                )
+
+                relationship_facts_text = " ".join(relationship_facts)
+
+                combined_relationship_text = (
+                    f"{relation_summary} "
+                    f"{all_memory_text} "
+                    f"{relationship_facts_text}"
+                )
+
+                relationship_states[other.name] = {
+                    "is_current_partner": "연애중" in combined_relationship_text,
+                    "is_ex_partner": "헤어진 연인" in combined_relationship_text,
+                    "relationship_facts": relationship_facts
+                }
+
+            # 대화에서는 goal/background를 뺀다.
+            # 이유: 이 값이 강하면 관계 중심 일상 대화가 아니라 직업/목표 이야기로 흐르기 쉽다.
             participant_info.append({
                 "name": agent.name,
                 "age": agent.profile.age,
@@ -275,13 +356,12 @@ Agent 정보:
                 "job": agent.profile.job,
                 "personality": agent.profile.personality,
                 "speech_style": agent.profile.speech_style,
-                "interests": agent.profile.interests,
-                "goal": agent.profile.goal,
-                "background": agent.profile.background,
+                "interests": agent.profile.interests[:2],
                 "quirks": agent.profile.quirks,
                 "known_info": known_info,
                 "relations": relations,
-                "meetings": meetings
+                "meetings": meetings,
+                "relationship_states": relationship_states
             })
 
         system_prompt = """
@@ -308,16 +388,39 @@ Agent별 발언 횟수:
 - 처음 만나는 상대인지 여부는 known_info 안의 has_met_before 값을 기준으로 판단한다.
 - has_met_before가 false인 상대와는 각 Agent의 첫 발언에서만 인사와 자기소개를 한다.
 - has_met_before가 true인 상대에게는 이름, 나이, 직업을 다시 소개하지 않는다.
-- 이미 만난 상대와는 이전 Memory, Relation, meet_count를 바탕으로 자연스럽게 이어서 대화한다.
-- Relation에 연애중, 가족, 친구, 동료 같은 기존 관계가 있으면 대화 톤에 자연스럽게 반영한다.
-- 기존 관계를 매 발언마다 직접 설명하지 않는다.
-- 연애중 관계라면 상대의 상태를 조금 더 신경 쓰거나 친근한 어조를 사용할 수 있다.
-- 단, 과장된 애정 표현이나 지나치게 사적인 표현은 피한다.
-- Memory에 상대 정보가 있더라도 has_met_before가 false이면 실제 대면은 처음인 것으로 처리한다.
 - 같은 라운드 안에서 자기소개를 반복하지 않는다.
-- 각 Agent의 speech_style, personality, interests, goal, background, quirks를 말투와 발화 내용에 적당히 반영한다.
+
+topic 처리 규칙:
+- topic이 있으면 그 topic을 대화의 표면적인 주제로 사용한다.
+- topic을 관계 갈등, 감정 고백, 연애 문제 주제로 바꾸지 않는다.
+- topic은 커피, 식사, 공부, 날씨, 근황 같은 일상 대화의 소재로 유지한다.
+- 관계 정보는 topic 자체를 바꾸는 것이 아니라 말투, 반응, 거리감, 배려, 어색함에만 영향을 준다.
+
+관계 말투 규칙:
+- relationship_states에서 is_current_partner가 true인 상대는 현재 연인으로 취급한다.
+- relationship_states에서 relationship_facts가 있으면 그 내용을 반드시 참고한다.
+- 현재 연인끼리는 서로에게 편한 말투나 반말을 사용할 수 있다.
+- 현재 연인끼리만 대화하는 상황이면 말투를 더 편하게 해도 된다.
+- 현재 연인끼리는 평범한 topic을 말하더라도 가벼운 배려, 익숙함, 자연스러운 챙김이 드러나게 한다.
+- 현재 연인끼리는 상대의 컨디션, 식사, 피곤함, 일정 같은 사소한 부분을 자연스럽게 챙길 수 있다.
+- 여러 사람이 함께 있는 상황에서는 연인 관계를 과하게 드러내지 말고, 짧은 챙김이나 눈치 보는 반응 정도로만 표현한다.
+- relationship_states에서 is_ex_partner가 true인 상대는 헤어진 연인으로 취급한다.
+- 헤어진 연인끼리는 반말을 쓸 수도 있지만, 어색해서 존댓말이나 거리감 있는 표현이 섞일 수 있다.
+- 헤어진 연인끼리는 평범한 topic을 말하더라도 말 고르기, 짧은 반응, 괜히 조심하는 태도가 드러날 수 있다.
+- 전 연인과 현재 연인이 같은 대화에 포함되어도 topic은 일상적으로 유지하고, 긴장감은 말투와 반응으로만 표현한다.
+- “우리는 연애중이니까”, “우리는 헤어진 사이니까” 같은 직접 설명은 피한다.
+- 감정을 직접 해설하지 말고 말투, 돌려 말하기, 짧은 대답, 상대를 살피는 표현으로 드러낸다.
+- 관계를 매 발언마다 직접 언급하지 않는다.
+
+인물 표현 규칙:
+- speech_style과 personality는 말투에 자연스럽게 반영한다.
+- interests는 대화가 끊길 때 보조 소재로만 사용한다.
+- goal과 background는 직접적인 주제가 되지 않는 한 대화에서 언급하지 않는다.
+- 관계가 있는 상대와 대화할 때도 직업/목표 이야기보다 일상 topic에 대한 반응과 분위기를 우선한다.
+- quirks는 과하지 않게 아주 가끔만 반영한다.
 - 성별은 인물 정보로만 참고하고, 성별 고정관념에 따라 말투나 행동을 과장하지 않는다.
 - 모든 Agent가 똑같은 말투로 말하지 않게 한다.
+- 모든 발언을 감정적으로 만들지는 말고, 일상 대화 안에 은근히 섞는다.
 - 각 발언은 1~2문장으로 짧게 한다.
 - 출력은 JSON 배열만 사용한다.
 
@@ -402,6 +505,11 @@ Agent별 발언 횟수:
                     continue
 
                 recent_memory = viewer.memory.get(target.name, [])[-self.max_memory_per_target:]
+                relationship_facts = self._extract_relationship_facts(
+                    agent=viewer,
+                    target_name=target.name
+                )
+
                 relation_entry = viewer.relation_map.get(target.name)
                 meeting_record = viewer.meeting_map.get(target.name)
 
@@ -412,6 +520,7 @@ Agent별 발언 횟수:
                         entry.fact
                         for entry in recent_memory
                     ],
+                    "relationship_facts": relationship_facts,
                     "old_reflection": (
                         relation_entry.summary
                         if relation_entry
@@ -470,8 +579,9 @@ Agent별 발언 횟수:
 2. reflections_by_viewer:
    - 각 관찰자(viewer)가 각 대상(target)을 어떻게 인식하는지 갱신한다.
    - viewer 자신에 대한 reflection은 만들지 않는다.
-   - 기존 Reflection, known_facts, meet_count, 이번 대화를 함께 고려한다.
+   - 기존 Reflection, known_facts, relationship_facts, meet_count, 이번 대화를 함께 고려한다.
    - 대상의 성격, 말투, 관심사, 목표, 특징이 관계 인식에 영향을 줄 수 있다.
+   - 헤어진 연인, 연애중, 과거 연인 관계가 있으면 감정선과 긴장감을 반영한다.
    - 너무 과장하지 않고 1~2문장으로 작성한다.
 
 출력 형식:

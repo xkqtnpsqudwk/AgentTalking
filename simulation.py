@@ -126,6 +126,23 @@ class Simulation:
         time_label: str,
         participants: List[Agent]
     ) -> str:
+        candidates = self._get_base_topics(
+            place=place,
+            time_label=time_label
+        )
+
+        self._add_light_interest_topics(
+            candidates=candidates,
+            participants=participants
+        )
+
+        return random.choice(candidates)
+
+    def _get_base_topics(
+        self,
+        place: str,
+        time_label: str
+    ) -> List[str]:
         topics_by_place = {
             "집": [
                 "오늘 하루 계획",
@@ -141,8 +158,8 @@ class Simulation:
             ],
             "카페": [
                 "커피 취향",
-                "최근 관심사",
-                "작업하기 좋은 장소",
+                "최근 근황",
+                "작업하기 좋은 자리",
                 "요즘 자주 하는 일"
             ],
             "도서관": [
@@ -183,43 +200,9 @@ class Simulation:
                 "오후 일정이나 저녁 계획"
             ])
 
-        if self._has_romantic_pair(participants):
-            candidates.extend([
-                "서로의 최근 컨디션",
-                "오늘 일정이 힘들지는 않았는지",
-                "같이 시간을 보내는 방식"
-            ])
+        return candidates
 
-        self._add_interest_based_topics(
-            candidates=candidates,
-            participants=participants
-        )
-
-        return random.choice(candidates)
-
-    def _has_romantic_pair(
-        self,
-        participants: List[Agent]
-    ) -> bool:
-        for viewer in participants:
-            for target in participants:
-                if viewer.name == target.name:
-                    continue
-
-                reflection = viewer.relation_map.get(target.name)
-
-                if reflection and "연애중" in reflection.summary:
-                    return True
-
-                memory_entries = viewer.memory.get(target.name, [])
-
-                for entry in memory_entries:
-                    if "연애중" in entry.fact:
-                        return True
-
-        return False
-
-    def _add_interest_based_topics(
+    def _add_light_interest_topics(
         self,
         candidates: List[str],
         participants: List[Agent]
@@ -227,10 +210,10 @@ class Simulation:
         interests = []
 
         for agent in participants:
-            interests.extend(agent.profile.interests[:2])
+            interests.extend(agent.profile.interests[:1])
 
         for interest in interests:
-            candidates.append(f"{interest}에 대한 이야기")
+            candidates.append(f"{interest}에 대한 가벼운 이야기")
 
     def run_conversation_round(
         self,
